@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 
 def affine_forward(x, w, b):
   """
@@ -6,7 +7,7 @@ def affine_forward(x, w, b):
 
   The input x has shape (N, d_1, ..., d_k) where x[i] is the ith input.
   We multiply this against a weight matrix of shape (D, M) where
-  D = \prod_i d_i
+  D = prod_i d_i
 
   Inputs:
   x - Input data, of shape (N, d_1, ..., d_k)
@@ -17,7 +18,9 @@ def affine_forward(x, w, b):
   - out: output, of shape (N, M). out = x w + b
   - cache: (x, w, b)
   """
-  out = None
+  shaped_x = x.reshape(x.shape[0],w.shape[0])
+  out   = np.matmul(shaped_x,w) + b
+  cache = (x,w,b)
   #############################################################################
   # Affine forward pass. First reshape the input into rows such that it has   #
   # shape N x D.                                                              #
@@ -37,14 +40,30 @@ def affine_backward(dout, cache):
     - w: Weights, of shape (D, M)
     - b: Biases, of shape (M,)
 
-
+  
   Returns a tuple of:
   - dx: Gradient with respect to x, of shape (N, d1, ..., d_k)
   - dw: Gradient with respect to w, of shape (D, M)
   - db: Gradient with respect to b, of shape (M,)
   """
   x, w, b = cache
-  dx, dw, db = None, None, None
+
+  newx  = x.reshape(x.shape[0], np.multiply.reduce(x.shape[1:]))
+
+  newdx = dout.dot(w.T)
+  dw    = newx.T.dot(dout)
+  db    = dout.T.dot(np.ones(x.shape[0])) 
+  dx    = newdx.reshape(x.shape)
+
+  # N = x.shape[0]
+  # D = np.prod(x.shape[1:])
+  # x2 = np.reshape(x, (N, D))
+
+  # dx2 = np.dot(dout, w.T) # N x D
+  # dw = np.dot(x2.T, dout) # D x M
+  # db = np.dot(dout.T, np.ones(N)) # M x 1
+
+  # dx = np.reshape(dx2, x.shape)
   #############################################################################
   # Affine backward pass.                                                     #
   #############################################################################
@@ -66,8 +85,13 @@ def relu_forward(x):
   #############################################################################
   # ReLU forward pass.                                                        #
   #############################################################################
-
-
+  cache = x
+  out = deepcopy(x)
+  out[out<=0] = 0
+  #############################################################################
+  #                             END OF YOUR CODE                              #
+  #############################################################################
+  
   return out, cache
 
 
@@ -82,7 +106,9 @@ def relu_backward(dout, cache):
   Returns:
   - dx: Gradient with respect to x
   """
-  x = cache
+  dx = dout
+  dx[cache<=0] = 0
+  # dx = (cache >= 0) * dout
   #############################################################################
   # ReLU backward pass.                                                       #
   #############################################################################
@@ -121,28 +147,29 @@ def conv_forward_naive(x, w, b, conv_param):
   stride = conv_param['stride']
   F, C, HH, WW = w.shape
   N, C, H, W = x.shape
-  Hp = 1 + (H + 2 * pad - HH) / stride
-  Wp = 1 + (W + 2 * pad - WW) / stride
+  Hp = 1 + (H + 2 * pad - HH) // stride
+  Wp = 1 + (W + 2 * pad - WW) // stride
 
   out = np.zeros((N, F, Hp, Wp))
 
   # Add padding around each 2D image
   padded = np.pad(x, [(0,0), (0,0), (pad,pad), (pad,pad)], 'constant')
 
-  for i in xrange(N): # ith example
-    for j in xrange(F): # jth filter
-
+  for i in range(N): # ith example
+    for j in range(F): # jth filter
+      c_filter = w[j]
       # Convolve this filter over windows
-      for k in xrange(Hp):
+      for k in range(Hp):
         hs = k * stride
-        for l in xrange(Wp):
+        for l in range(Wp):
           ws = l * stride
+          out[i,j,k,l] = np.sum(padded[i,:,hs:HH+hs,ws:WW+ws] * c_filter) + b[j] 
           # Convolve the jth filter over (C, HH, WW)
           # 
           # FILL IN THIS PART
           # 
 
-
+  cache = (x,w,b,conv_param)
   return out, cache
 
 
@@ -167,28 +194,35 @@ def conv_backward_naive(dout, cache):
   stride = conv_param['stride']
   F, C, HH, WW = w.shape
   N, C, H, W = x.shape
-  Hp = 1 + (H + 2 * pad - HH) / stride
-  Wp = 1 + (W + 2 * pad - WW) / stride
+  Hp = 1 + (H + 2 * pad - HH) // stride
+  Wp = 1 + (W + 2 * pad - WW) // stride
 
   dx = np.zeros_like(x)
   dw = np.zeros_like(w)
   db = np.zeros_like(b)
+  padded = np.pad(x, [(0,0), (0,0), (pad,pad), (pad,pad)], 'constant')
+  db = np.sum(dout, axis = (0,2,3))
 
   # You may need to pad the gradient and then unpad
-
-  for i in xrange(N): # ith example
-    for j in xrange(F): # jth filter
+  dx_pad = np.zeros_like(padded)
+  for i in range(N): # ith example
+    c_x = padded[i]
+    for j in range(F): # jth filter
+      c_filter = w[j]
       # Convolve this filter over windows
-      for k in xrange(Hp):
+      for k in range(Hp):
         hs = k * stride
-        for l in xrange(Wp):
+        for l in range(Wp):
           ws = l * stride
-
+          dw[j] += c_x[:,hs:HH+hs,ws:WW+ws] * dout[i,j,k,l]
+          # print(i,"hs",hs,HH+hs,"ws",ws,WW+ws)
+          dx_pad[i,:,hs:HH+hs,ws:WW+ws] += c_filter * dout[i,j,k,l]
           # Compute gradient of out[i, j, k, l] = np.sum(window*w[j]) + b[j]
           # 
           # FILL IN THIS PART 
           # 
 
+  dx = dx_pad[:,:,pad:-pad,pad:-pad]
   return dx, dw, db
 
 
@@ -215,23 +249,23 @@ def max_pool_forward_naive(x, pool_param):
   WW = pool_param['pool_width']
   stride = pool_param['stride']
   N, C, H, W = x.shape
-  Hp = 1 + (H - HH) / stride
-  Wp = 1 + (W - WW) / stride
+  Hp = 1 + (H - HH) // stride
+  Wp = 1 + (W - WW) // stride
 
   out = np.zeros((N, C, Hp, Wp))
 
-  for i in xrange(N):
+  for i in range(N):
     # Need this; apparently we are required to max separately over each channel
-    for j in xrange(C):
-      for k in xrange(Hp):
+    for j in range(C):
+      for k in range(Hp):
         hs = k * stride
-        for l in xrange(Wp):
+        for l in range(Wp):
           ws = l * stride
-
+          out[i,j,k,l] = np.max(x[i,j,hs:hs+HH,ws:ws+WW])
           # 
           # FILL IN THIS PART 
           # 
-
+  cache = (x,pool_param)
 
   return out, cache
 
@@ -256,21 +290,21 @@ def max_pool_backward_naive(dout, cache):
   WW = pool_param['pool_width']
   stride = pool_param['stride']
   N, C, H, W = x.shape
-  Hp = 1 + (H - HH) / stride
-  Wp = 1 + (W - WW) / stride
+  Hp = 1 + (H - HH) // stride
+  Wp = 1 + (W - WW) // stride
 
   dx = np.zeros_like(x)
 
-  for i in xrange(N):
-    for j in xrange(C):
-      for k in xrange(Hp):
+  for i in range(N):
+    for j in range(C):
+      for k in range(Hp):
         hs = k * stride
-        for l in xrange(Wp):
+        for l in range(Wp):
           ws = l * stride
+          x_window = x[i,j,hs:hs+HH,ws:ws+WW]
+          max_ind  = np.unravel_index(np.argmax(x_window), x_window.shape)
 
-          # 
-          # FILL IN THIS PART 
-          # 
+          dx[i,j,hs+max_ind[0],ws+max_ind[1]] += dout[i,j,k,l]
 
   return dx
 

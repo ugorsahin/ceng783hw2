@@ -44,7 +44,7 @@ def two_layer_convnet(X, model, y=None, reg=0.0):
   assert conv_filter_height == conv_filter_width, 'Conv filter must be square'
   assert conv_filter_height % 2 == 1, 'Conv filter height must be odd'
   assert conv_filter_width % 2 == 1, 'Conv filter width must be odd'
-  conv_param = {'stride': 1, 'pad': (conv_filter_height - 1) / 2}
+  conv_param = {'stride': 1, 'pad': (conv_filter_height - 1) // 2}
   pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
 
   # Compute the forward pass
@@ -101,6 +101,6 @@ def init_two_layer_convnet(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 
   model = {}
   model['W1'] = weight_scale * np.random.randn(num_filters, C, filter_size, filter_size)
   model['b1'] = bias_scale * np.random.randn(num_filters)
-  model['W2'] = weight_scale * np.random.randn(num_filters * H * W / 4, num_classes)
+  model['W2'] = weight_scale * np.random.randn(num_filters * H * W // 4, num_classes)
   model['b2'] = bias_scale * np.random.randn(num_classes)
   return model
