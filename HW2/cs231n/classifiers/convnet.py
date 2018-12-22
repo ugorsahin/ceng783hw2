@@ -72,8 +72,7 @@ def two_layer_convnet(X, model, y=None, reg=0.0):
   return loss, grads
 
 
-def init_two_layer_convnet(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32),
-                           num_classes=10, num_filters=32, filter_size=5):
+def init_two_layer_convnet(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32), num_classes=10, num_filters=32, filter_size=5):
   """
   Initialize the weights for a two-layer ConvNet.
 
@@ -104,3 +103,110 @@ def init_two_layer_convnet(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 
   model['W2'] = weight_scale * np.random.randn(num_filters * H * W // 4, num_classes)
   model['b2'] = bias_scale * np.random.randn(num_classes)
   return model
+
+
+def init_unet_classifier(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32), num_classes=10, num_filters=[32,64,128], num_hidden=[500], filter_size=5):
+    C, H, W = input_shape
+    assert filter_size % 2 == 1, 'Filter size must be odd; got %d' % filter_size
+
+    model = {}
+    in_c = C 
+    
+    for idx,out_channel in enumerate(num_filters):
+      model["convW" + str(idx)] = weight_scale * np.random.randn(out_channel, in_c, filter_size, filter_size)
+      model["convb" + str(idx)] = bias_scale * np.random.randn(out_channel)
+      in_c = out_channel
+
+    for idx,out_channel in enumerate(num_hidden):
+        if idx == 0:
+            in_c = in_c * H * W // (4**len(num_filters))
+
+        model['fcW' + str(idx)] = weight_scale * np.random.randn(in_c, out_channel)
+        model['fcb' + str(idx)] = bias_scale * np.random.randn(out_channel)
+        in_c = out_channel
+
+    model['outW'] = weight_scale * np.random.randn(in_c, num_classes)
+    model['outb'] = bias_scale * np.random.randn(num_classes)
+
+    return model
+
+def unet_classifier(X, model, y=None, reg=0.0):
+    N, C, H, W = X.shape
+
+    Wlist = []
+    # We assume that the convolution is "same", so that the data has the same
+    # height and width after performing the convolution. We can then use the
+    # size of the filter to figure out the padding.
+    conv_filter_height, conv_filter_width = model["convW0"].shape[2:]
+    assert conv_filter_height == conv_filter_width, 'Conv filter must be square'
+    assert conv_filter_height % 2 == 1, 'Conv filter height must be odd'
+    assert conv_filter_width % 2 == 1, 'Conv filter width must be odd'
+    conv_param = {'stride': 1, 'pad': (conv_filter_height - 1) // 2}
+    pool_param = {'pool_height': 2, 'pool_width': 2, 'stride': 2}
+
+    # Compute the forward pass
+    conv_ctr = 0
+    affn_ctr = 0
+    cacheConv = []
+    cacheAffn = []
+    feature = X;
+    while True:
+        try:
+            Ws = model["convW" + str(conv_ctr)]
+            bs = model["convb" + str(conv_ctr)]
+            feature, cache = conv_relu_pool_forward(feature, Ws, bs, conv_param, pool_param)
+            cacheConv.append(cache)
+            conv_ctr += 1
+            Wlist.append(Ws)
+        except KeyError:
+            break
+
+    while True:
+        try:
+            Ws = model["fcW" + str(affn_ctr)]
+            bs = model["fcb" + str(affn_ctr)]
+            feature, cache = affine_forward(feature, Ws, bs)
+            cacheAffn.append(cache)
+            affn_ctr += 1
+            Wlist.append(Ws)
+        except KeyError:
+            break
+
+    fcW,fcb = model["outW"], model["outb"]
+    Wlist.append(fcW)
+    scores, top_cache = affine_forward(feature, fcW, fcb)
+
+    if y is None:
+      return scores
+
+    # Compute the backward pass
+    data_loss, dscores = softmax_loss(scores, y)
+
+    # Compute the gradients using a backward pass
+    grads = {}
+    da, dW, db = affine_backward(dscores, top_cache)
+    grads["outW"] = dW
+    grads["outb"] = db
+
+    idx = len(cacheAffn) -1
+    for caches in cacheAffn[::-1]:
+        da, dW, db = affine_backward(da, caches)
+        grads["fcW" + str(idx)] = dW + reg * model["fcW" + str(idx)]
+        grads["fcb" + str(idx)] = db + reg * model["fcb" + str(idx)]
+        # print("convW" + str(idx))
+        idx = idx - 1
+
+    idx = len(cacheConv) -1
+    for caches in cacheConv[::-1]:
+        da, dW, db = conv_relu_pool_backward(da, caches)
+        grads["convW" + str(idx)] = dW + reg * model["convW" + str(idx)]
+        grads["convb" + str(idx)] = db + reg * model["convb" + str(idx)]
+        # print("convW" + str(idx))
+        idx = idx - 1
+
+    reg_loss = 0.5 * reg * sum(np.sum(W * W) for W in Wlist)
+
+    loss = data_loss + reg_loss
+    # grads = {'W1': dW1, 'b1': db1, 'W2': dW2, 'b2': db2}
+    
+    return loss, grads

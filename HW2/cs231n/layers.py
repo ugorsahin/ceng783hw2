@@ -94,7 +94,6 @@ def relu_forward(x):
   
   return out, cache
 
-
 def relu_backward(dout, cache):
   """
   Computes the backward pass for a layer of rectified linear units (ReLUs).
@@ -106,7 +105,7 @@ def relu_backward(dout, cache):
   Returns:
   - dx: Gradient with respect to x
   """
-  dx = dout
+  dx = deepcopy(dout)
   dx[cache<=0] = 0
   # dx = (cache >= 0) * dout
   #############################################################################
@@ -115,6 +114,18 @@ def relu_backward(dout, cache):
 
   return dx
 
+def lrelu_forward(x,a=0.01):
+  cache = x
+  out = deepcopy(x)
+  out[out<=0] *= a
+  
+  return out, cache
+
+def lrelu_backward(dout, cache, a=0.01):
+  dx = deepcopy(dout)
+  dx[cache<=0] = a
+  
+  return dx
 
 def conv_forward_naive(x, w, b, conv_param):
   """

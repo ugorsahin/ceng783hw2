@@ -1,5 +1,5 @@
 import numpy as np
-
+from cs231n.layers import softmax_loss
 
 class ClassifierTrainer(object):
   """ The trainer class performs SGD with momentum on a cost function """
@@ -66,7 +66,7 @@ class ClassifierTrainer(object):
     train_acc_history = []
     val_acc_history = []
     for it in range(num_iters):
-      if it % 10 == 0:  print('starting iteration ', it)
+      if it % 10 == 0:  print('\rstarting iteration ', it,end="")
 
       # get batch of data
       if sample_batches:
@@ -110,6 +110,37 @@ class ClassifierTrainer(object):
           #####################################################################
           self.step_cache[p] = decay_rate * self.step_cache[p] + (1 - decay_rate) * grads[p]**2
           dx = - learning_rate * grads[p] / np.sqrt(self.step_cache[p] + 1e-8)
+
+        elif update == 'adam':
+          beta1, beta2 = 0.9, 0.999
+          epsilon = 1e-8
+          lr = learning_rate
+          
+          if not p in self.step_cache:
+            state = {}
+            state["step"]    = 0
+            state["exp_avg"] = np.zeros_like(grads[p])
+            state["exp_avg_sq"] = np.zeros_like(grads[p])
+            self.step_cache[p] = state
+
+          self.step_cache[p]["step"] += 1
+          exp_avg    = self.step_cache[p]["exp_avg"]
+          exp_avg_sq = self.step_cache[p]["exp_avg_sq"]
+          step       = self.step_cache[p]["step"]
+
+          exp_avg      = beta1 * exp_avg + (1-beta1) * grads[p]
+          exp_avg_sq   = beta2 * exp_avg_sq + (1-beta2)*(grads[p]**2)
+          
+          denom     = np.sqrt(exp_avg_sq) + epsilon
+          
+          bias_cor1    = 1-beta1**step
+          bias_cor2    = 1-beta2**step
+
+          step_size = lr * np.sqrt(bias_cor2) / bias_cor1
+ 
+          dx = -( step_size * (exp_avg / denom))
+          self.step_cache[p]["exp_avg"]    = exp_avg   
+          self.step_cache[p]["exp_avg_sq"] = exp_avg_sq
 
         else:
           raise ValueError('Unrecognized update type "%s"' % update)
@@ -156,10 +187,11 @@ class ClassifierTrainer(object):
 
         # print progress if needed
         if verbose:
-          print ('Finished epoch %d / %d: cost %f, train: %f, val %f, lr %e'
+          print ('\nFinished epoch %d / %d: cost %f, train: %f, val %f, lr %e'
                  % (epoch, num_epochs, cost, train_acc, val_acc, learning_rate))
 
     if verbose:
       print ('finished optimization. best validation accuracy: %f' % (best_val_acc, ))
     # return the best model and the training history statistics
     return best_model, loss_history, train_acc_history, val_acc_history
+
