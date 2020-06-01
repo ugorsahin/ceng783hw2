@@ -105,10 +105,9 @@ def init_two_layer_convnet(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 
   return model
 
 
-def init_unet_classifier(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32), num_classes=10, num_filters=[32,64,128], num_hidden=[500], filter_size=5):
+def init_unet_classifier(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32), num_classes=10, num_filters=[32,64,128], num_hidden=[512], filter_size=5):
     C, H, W = input_shape
     assert filter_size % 2 == 1, 'Filter size must be odd; got %d' % filter_size
-
     model = {}
     in_c = C 
     
@@ -130,7 +129,7 @@ def init_unet_classifier(weight_scale=1e-3, bias_scale=0, input_shape=(3, 32, 32
 
     return model
 
-def unet_classifier(X, model, y=None, reg=0.0):
+def unet_classifier(X, model, y=None, reg=0.0, training=True):
     N, C, H, W = X.shape
 
     Wlist = []

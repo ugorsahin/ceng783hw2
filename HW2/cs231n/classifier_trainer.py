@@ -172,7 +172,7 @@ class ClassifierTrainer(object):
         train_acc_history.append(train_acc)
 
         # evaluate val accuracy
-        scores_val = loss_function(X_val, model)
+        scores_val = loss_function(X_val, model,training=False)
         y_pred_val = np.argmax(scores_val, axis=1)
         val_acc = np.mean(y_pred_val ==  y_val)
         val_acc_history.append(val_acc)
